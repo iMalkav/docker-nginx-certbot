@@ -1,5 +1,5 @@
-FROM nginx:1.21.6
-LABEL maintainer="Jonas Alfredsson <jonas.alfredsson@protonmail.com>"
+FROM owasp/modsecurity-crs:3.3.2-nginx
+LABEL maintainer="Eugene Arkharov <earharov@malk-it.ru>"
 
 ENV CERTBOT_DNS_AUTHENTICATORS \
     cloudflare \
@@ -16,6 +16,8 @@ ENV CERTBOT_DNS_AUTHENTICATORS \
     rfc2136 \
     route53 \
     sakuracloud
+
+ARG BUILDX_QEMU_ENV
 
 # Do a single run command to make the intermediary containers smaller.
 RUN set -ex && \
@@ -35,6 +37,11 @@ RUN set -ex && \
     && \
 # Install the latest version of PIP, Setuptools and Wheel.
     curl -L 'https://bootstrap.pypa.io/get-pip.py' | python3 && \
+# Handle an extremely specific issue when building the cryptography package for
+# 32-bit architectures within QEMU running on a 64-bit host (issue #30).
+    if [ "${BUILDX_QEMU_ENV}" = "true" ] && [ "$(getconf LONG_BIT)" = "32" ]; then \
+        pip3 install -U cryptography==3.3.2; \
+    fi && \
 # Install certbot.
     pip3 install -U cffi certbot \
 # And the supported extra authenticators
@@ -69,9 +76,9 @@ COPY nginx_conf.d/ /etc/nginx/conf.d/
 
 # Copy in all our scripts and make them executable.
 COPY scripts/ /scripts
-RUN chmod +x -R /scripts && \
+RUN chmod +x -R /scripts
 # Make so that the parent's entrypoint script is properly triggered (issue #21).
-    sed -ri '/^if \[ "\$1" = "nginx" -o "\$1" = "nginx-debug" \]; then$/,${s//if echo "$1" | grep -q "nginx"; then/;b};$q1' /docker-entrypoint.sh
+#    sed -ri '/^if \[ "\$1" = "nginx" -o "\$1" = "nginx-debug" \]; then$/,${s//if echo "$1" | grep -q "nginx"; then/;b};$q1' /docker-entrypoint.sh
 
 # Create a volume to have persistent storage for the obtained certificates.
 VOLUME /etc/letsencrypt
